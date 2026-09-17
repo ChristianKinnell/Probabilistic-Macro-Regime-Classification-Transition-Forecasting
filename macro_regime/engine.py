@@ -106,7 +106,7 @@ class AxisModel:
             n_features=n_regimes,
             n_iter=200,
             params="st",
-            init_params="st",
+            init_params="",
             random_state=self.config.random_state,
         )
         try:
@@ -156,7 +156,7 @@ class AxisModel:
 
     def _forecast_next_state_probabilities(self, states: np.ndarray, current_probabilities: np.ndarray) -> np.ndarray:
         if self.hmm is not None:
-            next_probabilities = self.hmm.predict_proba(states.reshape(-1, 1))[-1] @ self.hmm.transmat_
+            next_probabilities = self.hmm.transmat_[int(states[-1])]
             total = float(next_probabilities.sum())
             if total > 0:
                 return next_probabilities / total
@@ -255,11 +255,13 @@ class TwoAxisMacroRegimeEngine:
         volatility_states = self.volatility_liquidity_model.in_sample_states(dataset).rename(
             columns={"state_id": "volatility_state_id", "label": "volatility_label"}
         )
-        merged = (
-            frame.merge(growth_states, on="observed_at", how="inner")
-            .merge(volatility_states, on="observed_at", how="inner")
-            .sort_values("observed_at")
-        )
+        if not (len(frame) == len(growth_states) == len(volatility_states)):
+            raise ValueError("Point-in-time state histories must align with the latest-vintage series.")
+        merged = frame.copy()
+        merged["growth_state_id"] = growth_states["growth_state_id"].to_numpy()
+        merged["growth_label"] = growth_states["growth_label"].to_numpy()
+        merged["volatility_state_id"] = volatility_states["volatility_state_id"].to_numpy()
+        merged["volatility_label"] = volatility_states["volatility_label"].to_numpy()
         grouped_returns: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
         for _, row in merged.iterrows():
             label = f"{row['growth_label']} × {row['volatility_label']}"
