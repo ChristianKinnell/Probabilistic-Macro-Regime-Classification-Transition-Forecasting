@@ -73,14 +73,12 @@ class PointInTimeDataset:
                 .reset_index(drop=True)
             )
 
-        target_dates = self.observed_dates
-        snapshots: list[pd.Series] = []
-        for target_date in target_dates:
-            snapshot = self.snapshot(target_date)
-            row = snapshot[snapshot["observed_at"] == pd.Timestamp(target_date)]
-            if row.empty:
-                continue
-            snapshots.append(row.iloc[-1])
-        if not snapshots:
+        eligible = self._frame[self._frame["available_at"] <= self._frame["observed_at"]]
+        if eligible.empty:
             return pd.DataFrame(columns=self._frame.columns)
-        return pd.DataFrame(snapshots).sort_values("observed_at").reset_index(drop=True)
+        return (
+            eligible.groupby("observed_at", as_index=False)
+            .tail(1)
+            .sort_values("observed_at")
+            .reset_index(drop=True)
+        )

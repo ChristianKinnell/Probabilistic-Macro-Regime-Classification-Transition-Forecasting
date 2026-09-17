@@ -109,6 +109,8 @@ class AxisModel:
         )
         try:
             hmm.fit(states.reshape(-1, 1))
+            if hmm.emissionprob_.shape[1] != n_regimes:
+                return None
             return hmm
         except Exception:
             return None
@@ -154,7 +156,9 @@ class AxisModel:
             hidden_posterior = self.hmm.predict_proba(states.reshape(-1, 1))[-1]
             hidden_next = hidden_posterior @ self.hmm.transmat_
             observed_next = hidden_next @ self.hmm.emissionprob_
-            return observed_next / observed_next.sum()
+            total = float(observed_next.sum())
+            if total > 0:
+                return observed_next / total
         return current_probabilities @ self.empirical_transition
 
     def _format_probabilities(self, probabilities: Iterable[float]) -> dict[str, float]:
