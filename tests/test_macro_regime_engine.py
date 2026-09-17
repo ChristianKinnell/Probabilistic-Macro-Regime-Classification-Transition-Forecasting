@@ -139,8 +139,10 @@ class MacroRegimeEngineTests(unittest.TestCase):
             ]
         )
 
-        self.assertEqual(len(report.observations[0].growth_inflation.state_probabilities), 3)
-        self.assertEqual(len(report.observations[0].volatility_liquidity.state_probabilities), 3)
+        self.assertGreaterEqual(len(report.observations[0].growth_inflation.state_probabilities), 1)
+        self.assertLessEqual(len(report.observations[0].growth_inflation.state_probabilities), 3)
+        self.assertGreaterEqual(len(report.observations[0].volatility_liquidity.state_probabilities), 1)
+        self.assertLessEqual(len(report.observations[0].volatility_liquidity.state_probabilities), 3)
 
     def test_empty_feature_groups_are_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "growth_features must contain at least one feature"):
@@ -183,6 +185,24 @@ class MacroRegimeEngineTests(unittest.TestCase):
 
         self.assertAlmostEqual(report.nber_validation["precision"], 0.5)
         self.assertAlmostEqual(report.nber_validation["recall"], 0.5)
+
+    def test_nber_validation_without_labels_is_stable(self) -> None:
+        report = self.engine.fit(
+            [
+                MacroObservation(
+                    timestamp="2021-01-31",
+                    available_at="2021-01-31",
+                    macro_features={"growth": -1.0, "inflation": 0.5, "volatility": 0.8, "liquidity": -0.7},
+                ),
+                MacroObservation(
+                    timestamp="2021-02-28",
+                    available_at="2021-02-28",
+                    macro_features={"growth": 1.0, "inflation": -0.4, "volatility": -0.8, "liquidity": 0.9},
+                ),
+            ]
+        )
+
+        self.assertEqual(report.nber_validation, {"evaluated_observations": 0.0})
 
 
 if __name__ == "__main__":

@@ -147,7 +147,7 @@ class GaussianMixtureModel:
         global_variance = []
         for column, mean in zip(columns, global_mean):
             variance = _mean([(value - mean) ** 2 for value in column])
-            global_variance.append(max(variance, 1.0))
+            global_variance.append(max(variance, 1e-4))
 
         self.variances = [list(global_variance) for _ in range(component_count)]
         self.weights = [1.0 / component_count] * component_count
@@ -458,32 +458,28 @@ class MacroRegimeEngine:
             positive_labels=positive_labels,
             negative_labels=negative_labels,
         )
+        canonical_labels = self._ordered_unique(component_labels)
         classifications = []
         for probabilities, forecast in zip(filtered, forecasts):
-            label = component_labels[_argmax(probabilities)]
+            state_probabilities = self._aggregate_probabilities(probabilities, component_labels, canonical_labels)
+            next_state_probabilities = self._aggregate_probabilities(forecast, component_labels, canonical_labels)
+            label = max(state_probabilities, key=state_probabilities.get)
             classifications.append(
                 AxisClassification(
                     label=label,
-                    state_probabilities={
-                        component_labels[index]: probability
-                        for index, probability in enumerate(probabilities)
-                    },
-                    confidence=max(probabilities),
-                    uncertainty=_entropy(probabilities),
-                    next_state_probabilities={
-                        component_labels[index]: probability
-                        for index, probability in enumerate(forecast)
-                    },
+                    state_probabilities=state_probabilities,
+                    confidence=max(state_probabilities.values()),
+                    uncertainty=_entropy(list(state_probabilities.values())),
+                    next_state_probabilities=next_state_probabilities,
                 )
             )
 
-        transition_matrix = {
-            component_labels[row]: {
-                component_labels[column]: probability
-                for column, probability in enumerate(probabilities)
-            }
-            for row, probabilities in enumerate(hmm.transition_matrix)
-        }
+        transition_matrix = self._aggregate_transition_matrix(
+            hmm.transition_matrix,
+            component_labels,
+            canonical_labels,
+            gmm.weights,
+        )
         return {
             "name": axis_name,
             "classifications": classifications,
@@ -497,18 +493,59 @@ class MacroRegimeEngine:
         negative_labels: tuple[str, str],
     ) -> List[str]:
         labels: List[str] = []
-        seen: Dict[str, int] = {}
         for first_axis, second_axis in means:
             first = positive_labels[0] if first_axis >= 0.0 else negative_labels[0]
             second = positive_labels[1] if second_axis >= 0.0 else negative_labels[1]
-            label = f"{first} × {second}"
-            if label in seen:
-                seen[label] += 1
-                label = f"{label} #{seen[label]}"
-            else:
-                seen[label] = 1
-            labels.append(label)
+            labels.append(f"{first} × {second}")
         return labels
+
+    def _ordered_unique(self, labels: Sequence[str]) -> List[str]:
+        ordered: List[str] = []
+        for label in labels:
+            if label not in ordered:
+                ordered.append(label)
+        return ordered
+
+    def _aggregate_probabilities(
+        self,
+        probabilities: Sequence[float],
+        component_labels: Sequence[str],
+        canonical_labels: Sequence[str],
+    ) -> Dict[str, float]:
+        aggregated = {label: 0.0 for label in canonical_labels}
+        for label, probability in zip(component_labels, probabilities):
+            aggregated[label] += probability
+        return aggregated
+
+    def _aggregate_transition_matrix(
+        self,
+        transition_matrix: Sequence[Sequence[float]],
+        component_labels: Sequence[str],
+        canonical_labels: Sequence[str],
+        component_weights: Sequence[float],
+    ) -> Dict[str, Dict[str, float]]:
+        grouped: Dict[str, Dict[str, float]] = {
+            source: {target: 0.0 for target in canonical_labels}
+            for source in canonical_labels
+        }
+        source_totals = {source: 0.0 for source in canonical_labels}
+        for source_index, row in enumerate(transition_matrix):
+            source_label = component_labels[source_index]
+            source_weight = component_weights[source_index]
+            source_totals[source_label] += source_weight
+            for target_index, probability in enumerate(row):
+                grouped[source_label][component_labels[target_index]] += source_weight * probability
+
+        aggregated: Dict[str, Dict[str, float]] = {}
+        for source_label, targets in grouped.items():
+            source_total = source_totals[source_label]
+            if source_total <= 0.0:
+                aggregated[source_label] = {target: 0.0 for target in canonical_labels}
+            else:
+                aggregated[source_label] = {
+                    target: value / source_total for target, value in targets.items()
+                }
+        return aggregated
 
     def _validate_against_nber(
         self,
