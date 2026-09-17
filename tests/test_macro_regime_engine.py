@@ -92,6 +92,10 @@ class MacroRegimeEngineTests(unittest.TestCase):
                 ]
             )
 
+    def test_empty_input_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "at least one observation is required"):
+            self.engine.fit([])
+
 
 if __name__ == "__main__":
     unittest.main()

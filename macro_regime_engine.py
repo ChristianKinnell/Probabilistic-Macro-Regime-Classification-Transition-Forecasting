@@ -226,7 +226,10 @@ class HiddenMarkovModel:
             raise ValueError("cannot fit an HMM without emissions")
 
         state_count = len(emissions[0])
-        self.initial_probabilities = _normalize(prior)
+        aligned_prior = list(prior[:state_count])
+        if len(aligned_prior) < state_count:
+            aligned_prior.extend([1.0] * (state_count - len(aligned_prior)))
+        self.initial_probabilities = _normalize(aligned_prior)
         counts = [
             [self.smoothing for _ in range(state_count)]
             for _ in range(state_count)
@@ -354,6 +357,9 @@ class MacroRegimeEngine:
                     combined_label=f"{gi.label} | {vl.label}",
                 )
             )
+
+        if not regime_observations:
+            raise ValueError("regime fitting produced no classifications")
 
         return MacroRegimeReport(
             observations=regime_observations,

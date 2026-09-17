@@ -3,7 +3,7 @@ Systematic two-axis macro regime engine using point-in-time data, PCA, GMM and H
 
 ## Minimal implementation
 
-The repository now includes a small self-contained Python module at `/home/runner/work/Probabilistic-Macro-Regime-Classification-Transition-Forecasting/Probabilistic-Macro-Regime-Classification-Transition-Forecasting/macro_regime_engine.py` that:
+The repository now includes a small self-contained Python module at `macro_regime_engine.py` that:
 
 - enforces point-in-time safe observations through `available_at <= timestamp`
 - compresses feature groups with a lightweight PCA-style first principal component
@@ -16,6 +16,5 @@ The repository now includes a small self-contained Python module at `/home/runne
 ## Running the tests
 
 ```bash
-cd /home/runner/work/Probabilistic-Macro-Regime-Classification-Transition-Forecasting/Probabilistic-Macro-Regime-Classification-Transition-Forecasting
 python -m unittest discover -s tests -v
 ```
