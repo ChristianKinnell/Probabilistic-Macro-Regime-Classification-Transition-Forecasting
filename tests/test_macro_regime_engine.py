@@ -212,6 +212,53 @@ class MacroRegimeEngineTests(unittest.TestCase):
             },
         )
 
+    def test_nber_validation_is_independent_of_growth_pca_sign(self) -> None:
+        class SignFlippedGrowthEngine(MacroRegimeEngine):
+            def _reduce_feature_group(self, observations, features):
+                scores = super()._reduce_feature_group(observations, features)
+                if list(features) == self.growth_features:
+                    return [-score for score in scores]
+                return scores
+
+        observations = [
+            MacroObservation(
+                timestamp="2021-01-31",
+                available_at="2021-01-31",
+                macro_features={"growth": -2.0, "inflation": 0.5, "volatility": 1.0, "liquidity": -1.0},
+                nber_recession=True,
+            ),
+            MacroObservation(
+                timestamp="2021-02-28",
+                available_at="2021-02-28",
+                macro_features={"growth": -1.5, "inflation": 0.4, "volatility": 0.8, "liquidity": -0.8},
+                nber_recession=False,
+            ),
+            MacroObservation(
+                timestamp="2021-03-31",
+                available_at="2021-03-31",
+                macro_features={"growth": 1.8, "inflation": -0.4, "volatility": -0.8, "liquidity": 0.9},
+                nber_recession=True,
+            ),
+            MacroObservation(
+                timestamp="2021-04-30",
+                available_at="2021-04-30",
+                macro_features={"growth": 2.1, "inflation": -0.6, "volatility": -1.0, "liquidity": 1.1},
+                nber_recession=False,
+            ),
+        ]
+
+        flipped_engine = SignFlippedGrowthEngine(
+            growth_features=["growth"],
+            inflation_features=["inflation"],
+            volatility_features=["volatility"],
+            liquidity_features=["liquidity"],
+        )
+
+        self.assertEqual(
+            self.engine.fit(observations).nber_validation,
+            flipped_engine.fit(observations).nber_validation,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

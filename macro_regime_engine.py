@@ -254,24 +254,15 @@ class HiddenMarkovModel:
         if not emissions:
             return filtered_probabilities, forecast_probabilities
 
-        previous = _normalize(
-            [
-                self.initial_probabilities[state] * emissions[0][state]
-                for state in range(len(self.initial_probabilities))
-            ]
-        )
-        filtered_probabilities.append(previous)
-        forecast = [
-            sum(previous[source] * self.transition_matrix[source][target] for source in range(len(previous)))
-            for target in range(len(previous))
-        ]
-        forecast_probabilities.append(_normalize(forecast))
-
-        for emission in emissions[1:]:
-            predicted = [
-                sum(previous[source] * self.transition_matrix[source][target] for source in range(len(previous)))
-                for target in range(len(previous))
-            ]
+        previous = list(self.initial_probabilities)
+        for index, emission in enumerate(emissions):
+            if index == 0:
+                predicted = previous
+            else:
+                predicted = [
+                    sum(previous[source] * self.transition_matrix[source][target] for source in range(len(previous)))
+                    for target in range(len(previous))
+                ]
             filtered = _normalize(
                 [predicted[state] * emission[state] for state in range(len(predicted))]
             )
@@ -346,6 +337,7 @@ class MacroRegimeEngine:
 
     def fit(self, observations: Iterable[MacroObservation]) -> MacroRegimeReport:
         ordered = self._validate_and_order(observations)
+        growth_validation_scores = self._aggregate_feature_group(ordered, self.growth_features)
         growth_scores = self._reduce_feature_group(ordered, self.growth_features)
         inflation_scores = self._reduce_feature_group(ordered, self.inflation_features)
         volatility_scores = self._reduce_feature_group(ordered, self.volatility_features)
@@ -401,7 +393,7 @@ class MacroRegimeEngine:
                 "growth_inflation": growth_inflation_axis["transition_matrix"],
                 "volatility_liquidity": volatility_liquidity_axis["transition_matrix"],
             },
-            nber_validation=self._validate_against_nber(ordered, growth_scores),
+            nber_validation=self._validate_against_nber(ordered, growth_validation_scores),
             asset_class_behaviour=self._map_asset_class_behaviour(ordered, regime_observations),
         )
 
@@ -439,6 +431,16 @@ class MacroRegimeEngine:
         ]
         standardized, _, _ = _standardize(matrix)
         return _principal_component_scores(standardized)
+
+    def _aggregate_feature_group(
+        self,
+        observations: Sequence[MacroObservation],
+        features: Sequence[str],
+    ) -> List[float]:
+        return [
+            _mean([float(observation.macro_features[feature]) for feature in features])
+            for observation in observations
+        ]
 
     def _fit_axis(
         self,
