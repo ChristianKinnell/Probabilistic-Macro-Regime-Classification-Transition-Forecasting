@@ -105,12 +105,15 @@ class AxisModel:
             n_components=n_regimes,
             n_features=n_regimes,
             n_iter=200,
+            params="st",
+            init_params="st",
             random_state=self.config.random_state,
         )
         try:
+            hmm.startprob_ = np.full(n_regimes, 1.0 / n_regimes)
+            hmm.transmat_ = self.empirical_transition.copy()
+            hmm.emissionprob_ = np.eye(n_regimes)
             hmm.fit(states.reshape(-1, 1))
-            if hmm.emissionprob_.shape[1] != n_regimes:
-                return None
             return hmm
         except Exception:
             return None
@@ -153,12 +156,10 @@ class AxisModel:
 
     def _forecast_next_state_probabilities(self, states: np.ndarray, current_probabilities: np.ndarray) -> np.ndarray:
         if self.hmm is not None:
-            hidden_posterior = self.hmm.predict_proba(states.reshape(-1, 1))[-1]
-            hidden_next = hidden_posterior @ self.hmm.transmat_
-            observed_next = hidden_next @ self.hmm.emissionprob_
-            total = float(observed_next.sum())
+            next_probabilities = self.hmm.predict_proba(states.reshape(-1, 1))[-1] @ self.hmm.transmat_
+            total = float(next_probabilities.sum())
             if total > 0:
-                return observed_next / total
+                return next_probabilities / total
         return current_probabilities @ self.empirical_transition
 
     def _format_probabilities(self, probabilities: Iterable[float]) -> dict[str, float]:

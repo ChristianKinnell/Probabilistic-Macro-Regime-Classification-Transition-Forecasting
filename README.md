@@ -48,6 +48,28 @@ dataset = PointInTimeDataset(
             },
             asset_returns={"equities": 0.008, "bonds": 0.002},
         ),
+        PointInTimeRecord(
+            observed_at=date(2024, 3, 1),
+            available_at=date(2024, 3, 1),
+            values={
+                "growth": -0.7,
+                "inflation": 3.0,
+                "volatility": 0.9,
+                "liquidity": -0.4,
+            },
+            asset_returns={"equities": -0.011, "bonds": 0.007},
+        ),
+        PointInTimeRecord(
+            observed_at=date(2024, 4, 1),
+            available_at=date(2024, 4, 1),
+            values={
+                "growth": -1.0,
+                "inflation": 1.8,
+                "volatility": 1.1,
+                "liquidity": -0.6,
+            },
+            asset_returns={"equities": -0.006, "bonds": 0.009},
+        ),
     ]
 )
 
@@ -55,12 +77,12 @@ engine = TwoAxisMacroRegimeEngine(
     growth_inflation=AxisConfig(
         name="growth_inflation",
         features=("growth", "inflation"),
-        n_regimes=1,
+        n_regimes=2,
     ),
     volatility_liquidity=AxisConfig(
         name="volatility_liquidity",
         features=("volatility", "liquidity"),
-        n_regimes=1,
+        n_regimes=2,
     ),
 ).fit(dataset)
 
