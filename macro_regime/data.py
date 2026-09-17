@@ -73,11 +73,10 @@ class PointInTimeDataset:
                 .reset_index(drop=True)
             )
 
-        eligible = self._frame[self._frame["available_at"] <= self._frame["observed_at"]]
-        if eligible.empty:
+        if self._frame.empty:
             return pd.DataFrame(columns=self._frame.columns)
         return (
-            eligible.groupby("observed_at", as_index=False)
+            self._frame.groupby("observed_at", as_index=False)
             .tail(1)
             .sort_values("observed_at")
             .reset_index(drop=True)

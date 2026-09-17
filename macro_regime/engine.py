@@ -44,7 +44,7 @@ class AxisModel:
 
         features = frame.loc[:, list(self.config.features)].astype(float)
         n_components = min(self.config.n_components, len(self.config.features), len(features))
-        n_regimes = min(self.config.n_regimes, len(features))
+        n_regimes = max(1, min(self.config.n_regimes, len(features) // 2 or 1))
 
         self.scaler = StandardScaler()
         scaled = self.scaler.fit_transform(features)

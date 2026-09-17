@@ -77,6 +77,8 @@ class MacroRegimeEngineTests(unittest.TestCase):
         self.assertIn("joint_state", result)
         self.assertGreaterEqual(result["confidence"], 0.0)
         self.assertLessEqual(result["confidence"], 1.0)
+        self.assertGreaterEqual(result["uncertainty"], 0.0)
+        self.assertLessEqual(result["uncertainty"], 1.0)
         growth_probs = result["axes"]["growth_inflation"]["transition_probabilities"]
         self.assertAlmostEqual(sum(growth_probs.values()), 1.0, places=6)
 

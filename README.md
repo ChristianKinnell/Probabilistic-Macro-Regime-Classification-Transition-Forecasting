@@ -55,10 +55,12 @@ engine = TwoAxisMacroRegimeEngine(
     growth_inflation=AxisConfig(
         name="growth_inflation",
         features=("growth", "inflation"),
+        n_regimes=1,
     ),
     volatility_liquidity=AxisConfig(
         name="volatility_liquidity",
         features=("volatility", "liquidity"),
+        n_regimes=1,
     ),
 ).fit(dataset)
 
