@@ -7,8 +7,12 @@ from macro_regime import AxisConfig, PointInTimeDataset, PointInTimeRecord, TwoA
 
 
 def build_dataset() -> PointInTimeDataset:
+    return build_dataset_with_months(24)
+
+
+def build_dataset_with_months(months: int) -> PointInTimeDataset:
     records: list[PointInTimeRecord] = []
-    observed_dates = [date(2020 + (month - 1) // 12, ((month - 1) % 12) + 1, 1) for month in range(1, 25)]
+    observed_dates = [date(2020 + (month - 1) // 12, ((month - 1) % 12) + 1, 1) for month in range(1, months + 1)]
     regimes = [
         (2.0, -1.5, -1.0, 1.5, 0.030, -0.005),
         (1.8, 1.7, -0.8, -1.2, 0.020, -0.015),
@@ -31,7 +35,7 @@ def build_dataset() -> PointInTimeDataset:
                 asset_returns={"equities": equities, "bonds": bonds},
             )
         )
-        if index < 6:
+        if index < min(6, months):
             revised_month = observed_at.month + 1
             revised_year = observed_at.year + (1 if revised_month == 13 else 0)
             revised_month = 1 if revised_month == 13 else revised_month
@@ -75,6 +79,20 @@ class MacroRegimeEngineTests(unittest.TestCase):
         self.assertLessEqual(result["confidence"], 1.0)
         growth_probs = result["axes"]["growth_inflation"]["transition_probabilities"]
         self.assertAlmostEqual(sum(growth_probs.values()), 1.0, places=6)
+
+    def test_small_samples_use_empirical_transition_fallback(self) -> None:
+        small_dataset = build_dataset_with_months(6)
+        small_engine = TwoAxisMacroRegimeEngine(
+            growth_inflation=AxisConfig(name="growth_inflation", features=("growth", "inflation")),
+            volatility_liquidity=AxisConfig(name="volatility_liquidity", features=("volatility", "liquidity")),
+        ).fit(small_dataset)
+        self.assertIsNone(small_engine.growth_inflation_model.hmm)
+        result = small_engine.classify(small_dataset, date(2020, 6, 1))
+        self.assertAlmostEqual(
+            sum(result["axes"]["growth_inflation"]["transition_probabilities"].values()),
+            1.0,
+            places=6,
+        )
 
     def test_recession_validation_returns_metrics(self) -> None:
         metrics = self.engine.validate_against_recessions(

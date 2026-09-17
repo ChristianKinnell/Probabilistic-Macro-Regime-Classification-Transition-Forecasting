@@ -34,6 +34,7 @@ class AxisModel:
         self.hmm: CategoricalHMM | None = None
         self.empirical_transition: np.ndarray | None = None
         self.state_labels: dict[int, str] = {}
+        self.state_feature_levels: dict[int, tuple[str, str]] = {}
         self.feature_thresholds: tuple[float, float] | None = None
 
     def fit(self, dataset: PointInTimeDataset) -> None:
@@ -58,7 +59,7 @@ class AxisModel:
         )
         states = self.gmm.fit_predict(reduced)
         self.feature_thresholds = tuple(features.median().tolist())  # type: ignore[assignment]
-        self.state_labels = self._build_state_labels(features, states, n_regimes)
+        self.state_labels, self.state_feature_levels = self._build_state_labels(features, states, n_regimes)
         self.empirical_transition = self._build_empirical_transition(states, n_regimes)
         self.hmm = self._fit_hmm(states, n_regimes)
 
@@ -100,7 +101,12 @@ class AxisModel:
         minimum_observations = max(3, n_regimes * n_regimes * 2)
         if len(states) < minimum_observations or n_regimes < 2:
             return None
-        hmm = CategoricalHMM(n_components=n_regimes, n_iter=200, random_state=self.config.random_state)
+        hmm = CategoricalHMM(
+            n_components=n_regimes,
+            n_features=n_regimes,
+            n_iter=200,
+            random_state=self.config.random_state,
+        )
         try:
             hmm.fit(states.reshape(-1, 1))
             return hmm
@@ -114,18 +120,25 @@ class AxisModel:
             counts[int(current_state), int(next_state)] += 1.0
         return counts / counts.sum(axis=1, keepdims=True)
 
-    def _build_state_labels(self, features: pd.DataFrame, states: np.ndarray, n_regimes: int) -> dict[int, str]:
+    def _build_state_labels(
+        self,
+        features: pd.DataFrame,
+        states: np.ndarray,
+        n_regimes: int,
+    ) -> tuple[dict[int, str], dict[int, tuple[str, str]]]:
         first_feature, second_feature = self.config.features
         first_name = first_feature.replace("_", " ").title()
         second_name = second_feature.replace("_", " ").title()
         first_threshold, second_threshold = self.feature_thresholds or (0.0, 0.0)
         labels: dict[int, str] = {}
+        feature_levels: dict[int, tuple[str, str]] = {}
         used: set[str] = set()
         for state_id in range(n_regimes):
             cluster = features.iloc[states == state_id]
             center = cluster.mean() if not cluster.empty else features.mean()
             first_level = "High" if float(center.iloc[0]) >= first_threshold else "Low"
             second_level = "High" if float(center.iloc[1]) >= second_threshold else "Low"
+            feature_levels[state_id] = (first_level, second_level)
             label = f"{first_name} {first_level} / {second_name} {second_level}"
             unique_label = label
             suffix = 2
@@ -134,7 +147,7 @@ class AxisModel:
                 suffix += 1
             used.add(unique_label)
             labels[state_id] = unique_label
-        return labels
+        return labels, feature_levels
 
     def _forecast_next_state_probabilities(self, states: np.ndarray, current_probabilities: np.ndarray) -> np.ndarray:
         if self.hmm is not None:
@@ -160,7 +173,16 @@ class AxisModel:
         return entropy / max_entropy if max_entropy else 0.0
 
     def _ensure_fit(self) -> None:
-        if not all([self.scaler, self.pca, self.gmm, self.state_labels, self.empirical_transition is not None]):
+        if not all(
+            [
+                self.scaler,
+                self.pca,
+                self.gmm,
+                self.state_labels,
+                self.state_feature_levels,
+                self.empirical_transition is not None,
+            ]
+        ):
             raise RuntimeError(f"{self.config.name} has not been fit yet.")
 
 
@@ -200,7 +222,12 @@ class TwoAxisMacroRegimeEngine:
             return {"precision": 0.0, "recall": 0.0, "accuracy": 0.0}
 
         flags = states["observed_at"].dt.date.apply(lambda day: self._is_recession(day, recession_periods))
-        predicted = states["label"].str.contains("Growth Low")
+        predicted_state_ids = {
+            state_id
+            for state_id, (first_level, _) in self.growth_inflation_model.state_feature_levels.items()
+            if first_level == "Low"
+        }
+        predicted = states["state_id"].isin(predicted_state_ids)
 
         tp = int((predicted & flags).sum())
         fp = int((predicted & ~flags).sum())
@@ -213,23 +240,28 @@ class TwoAxisMacroRegimeEngine:
         return {"precision": precision, "recall": recall, "accuracy": accuracy}
 
     def asset_regime_map(self, dataset: PointInTimeDataset) -> dict[str, dict[str, float]]:
-        observed_dates = dataset.observed_dates
-        if not observed_dates or not dataset.asset_names:
+        frame = dataset.time_series()
+        if frame.empty or not dataset.asset_names:
             return {}
 
+        growth_states = self.growth_inflation_model.in_sample_states(dataset).rename(
+            columns={"state_id": "growth_state_id", "label": "growth_label"}
+        )
+        volatility_states = self.volatility_liquidity_model.in_sample_states(dataset).rename(
+            columns={"state_id": "volatility_state_id", "label": "volatility_label"}
+        )
+        merged = (
+            frame.merge(growth_states, on="observed_at", how="inner")
+            .merge(volatility_states, on="observed_at", how="inner")
+            .sort_values("observed_at")
+        )
         grouped_returns: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
-        for observed_at in observed_dates:
-            regime = self.classify(dataset, observed_at)
-            snapshot = dataset.snapshot(observed_at)
-            row = snapshot[snapshot["observed_at"] == pd.Timestamp(observed_at)]
-            if row.empty:
-                continue
-            point_in_time_row = row.iloc[-1]
-            label = str(regime["joint_state"])
+        for _, row in merged.iterrows():
+            label = f"{row['growth_label']} × {row['volatility_label']}"
             for asset in dataset.asset_names:
                 column = f"asset::{asset}"
-                if column in point_in_time_row and not pd.isna(point_in_time_row[column]):
-                    grouped_returns[label][asset].append(float(point_in_time_row[column]))
+                if column in row and not pd.isna(row[column]):
+                    grouped_returns[label][asset].append(float(row[column]))
 
         return {
             regime: {
