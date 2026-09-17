@@ -115,7 +115,7 @@ class AxisModel:
             hmm.emissionprob_ = np.eye(n_regimes)
             hmm.fit(states.reshape(-1, 1))
             return hmm
-        except Exception:
+        except (ValueError, RuntimeError):
             return None
 
     @staticmethod
@@ -156,7 +156,7 @@ class AxisModel:
 
     def _forecast_next_state_probabilities(self, states: np.ndarray, current_probabilities: np.ndarray) -> np.ndarray:
         if self.hmm is not None:
-            next_probabilities = self.hmm.transmat_[int(states[-1])]
+            next_probabilities = current_probabilities @ self.hmm.transmat_
             total = float(next_probabilities.sum())
             if total > 0:
                 return next_probabilities / total
@@ -222,6 +222,12 @@ class TwoAxisMacroRegimeEngine:
         dataset: PointInTimeDataset,
         recession_periods: list[tuple[date, date]],
     ) -> dict[str, float]:
+        """Score whether low-growth fitted states align with supplied recession windows.
+
+        The signal is derived from growth-axis states whose first fitted feature level is
+        classified as "Low" relative to the in-sample state thresholds. Returned metrics
+        measure how well those low-growth states line up with the provided recession dates.
+        """
         states = self.growth_inflation_model.in_sample_states(dataset)
         if states.empty:
             return {"precision": 0.0, "recall": 0.0, "accuracy": 0.0}
@@ -255,13 +261,17 @@ class TwoAxisMacroRegimeEngine:
         volatility_states = self.volatility_liquidity_model.in_sample_states(dataset).rename(
             columns={"state_id": "volatility_state_id", "label": "volatility_label"}
         )
-        if not (len(frame) == len(growth_states) == len(volatility_states)):
+        if frame["observed_at"].duplicated().any():
+            raise ValueError("Point-in-time asset mapping requires unique observed dates.")
+        if growth_states["observed_at"].duplicated().any() or volatility_states["observed_at"].duplicated().any():
+            raise ValueError("State histories must contain unique observed dates.")
+        merged = (
+            frame.merge(growth_states, on="observed_at", how="inner")
+            .merge(volatility_states, on="observed_at", how="inner")
+            .sort_values("observed_at")
+        )
+        if len(merged) != len(frame):
             raise ValueError("Point-in-time state histories must align with the latest-vintage series.")
-        merged = frame.copy()
-        merged["growth_state_id"] = growth_states["growth_state_id"].to_numpy()
-        merged["growth_label"] = growth_states["growth_label"].to_numpy()
-        merged["volatility_state_id"] = volatility_states["volatility_state_id"].to_numpy()
-        merged["volatility_label"] = volatility_states["volatility_label"].to_numpy()
         grouped_returns: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
         for _, row in merged.iterrows():
             label = f"{row['growth_label']} × {row['volatility_label']}"
