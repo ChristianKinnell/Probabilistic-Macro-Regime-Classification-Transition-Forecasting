@@ -337,8 +337,9 @@ class MacroRegimeEngine:
 
     def fit(self, observations: Iterable[MacroObservation]) -> MacroRegimeReport:
         ordered = self._validate_and_order(observations)
-        growth_validation_scores = self._aggregate_feature_group(ordered, self.growth_features)
         growth_scores = self._reduce_feature_group(ordered, self.growth_features)
+        growth_anchor_scores = self._aggregate_feature_group(ordered, self.growth_features)
+        growth_scores = self._orient_scores(growth_scores, growth_anchor_scores)
         inflation_scores = self._reduce_feature_group(ordered, self.inflation_features)
         volatility_scores = self._reduce_feature_group(ordered, self.volatility_features)
         liquidity_scores = self._reduce_feature_group(ordered, self.liquidity_features)
@@ -393,7 +394,7 @@ class MacroRegimeEngine:
                 "growth_inflation": growth_inflation_axis["transition_matrix"],
                 "volatility_liquidity": volatility_liquidity_axis["transition_matrix"],
             },
-            nber_validation=self._validate_against_nber(ordered, growth_validation_scores),
+            nber_validation=self._validate_against_nber(ordered, growth_scores),
             asset_class_behaviour=self._map_asset_class_behaviour(ordered, regime_observations),
         )
 
@@ -442,6 +443,23 @@ class MacroRegimeEngine:
             for observation in observations
         ]
 
+    def _orient_scores(
+        self,
+        scores: Sequence[float],
+        anchor_scores: Sequence[float],
+    ) -> List[float]:
+        if not scores:
+            return []
+        centered_scores = [score - _mean(scores) for score in scores]
+        centered_anchor = [score - _mean(anchor_scores) for score in anchor_scores]
+        covariance = sum(
+            score * anchor
+            for score, anchor in zip(centered_scores, centered_anchor)
+        )
+        if covariance < 0.0:
+            return [-score for score in scores]
+        return list(scores)
+
     def _fit_axis(
         self,
         points: Sequence[Sequence[float]],
@@ -462,7 +480,7 @@ class MacroRegimeEngine:
             positive_labels=positive_labels,
             negative_labels=negative_labels,
         )
-        canonical_labels = self._ordered_unique(component_labels)
+        canonical_labels = self._canonical_axis_labels(positive_labels, negative_labels)
         classifications = []
         for probabilities, forecast in zip(filtered, forecasts):
             state_probabilities = self._aggregate_probabilities(probabilities, component_labels, canonical_labels)
@@ -503,12 +521,17 @@ class MacroRegimeEngine:
             labels.append(f"{first} × {second}")
         return labels
 
-    def _ordered_unique(self, labels: Sequence[str]) -> List[str]:
-        ordered: List[str] = []
-        for label in labels:
-            if label not in ordered:
-                ordered.append(label)
-        return ordered
+    def _canonical_axis_labels(
+        self,
+        positive_labels: tuple[str, str],
+        negative_labels: tuple[str, str],
+    ) -> List[str]:
+        return [
+            f"{positive_labels[0]} × {positive_labels[1]}",
+            f"{positive_labels[0]} × {negative_labels[1]}",
+            f"{negative_labels[0]} × {positive_labels[1]}",
+            f"{negative_labels[0]} × {negative_labels[1]}",
+        ]
 
     def _aggregate_probabilities(
         self,

@@ -1,3 +1,4 @@
+from datetime import date, datetime
 import unittest
 
 from macro_regime_engine import MacroObservation, MacroRegimeEngine
@@ -139,10 +140,8 @@ class MacroRegimeEngineTests(unittest.TestCase):
             ]
         )
 
-        self.assertGreaterEqual(len(report.observations[0].growth_inflation.state_probabilities), 1)
-        self.assertLessEqual(len(report.observations[0].growth_inflation.state_probabilities), 3)
-        self.assertGreaterEqual(len(report.observations[0].volatility_liquidity.state_probabilities), 1)
-        self.assertLessEqual(len(report.observations[0].volatility_liquidity.state_probabilities), 3)
+        self.assertEqual(len(report.observations[0].growth_inflation.state_probabilities), 4)
+        self.assertEqual(len(report.observations[0].volatility_liquidity.state_probabilities), 4)
 
     def test_empty_feature_groups_are_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "growth_features must contain at least one feature"):
@@ -258,6 +257,24 @@ class MacroRegimeEngineTests(unittest.TestCase):
             self.engine.fit(observations).nber_validation,
             flipped_engine.fit(observations).nber_validation,
         )
+
+    def test_date_and_datetime_inputs_are_accepted(self) -> None:
+        report = self.engine.fit(
+            [
+                MacroObservation(
+                    timestamp=datetime(2021, 2, 28, 12, 0, 0),
+                    available_at=date(2021, 2, 28),
+                    macro_features={"growth": -1.0, "inflation": 0.5, "volatility": 0.8, "liquidity": -0.7},
+                ),
+                MacroObservation(
+                    timestamp="2021-03-31",
+                    available_at=datetime(2021, 3, 31, 9, 30, 0),
+                    macro_features={"growth": 1.0, "inflation": -0.4, "volatility": -0.8, "liquidity": 0.9},
+                ),
+            ]
+        )
+
+        self.assertEqual([observation.timestamp.isoformat() for observation in report.observations], ["2021-02-28", "2021-03-31"])
 
 
 if __name__ == "__main__":
