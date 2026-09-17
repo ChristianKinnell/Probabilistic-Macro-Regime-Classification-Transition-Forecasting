@@ -22,6 +22,8 @@ def _mean(values: Sequence[float]) -> float:
 
 
 def _normalize(values: Sequence[float]) -> List[float]:
+    if not values:
+        return []
     total = sum(values)
     if total <= 0.0:
         return [1.0 / len(values)] * len(values)
@@ -313,6 +315,15 @@ class MacroRegimeEngine:
         self.volatility_features = list(volatility_features)
         self.liquidity_features = list(liquidity_features)
         self.n_components = n_components
+        feature_groups = {
+            "growth_features": self.growth_features,
+            "inflation_features": self.inflation_features,
+            "volatility_features": self.volatility_features,
+            "liquidity_features": self.liquidity_features,
+        }
+        for group_name, features in feature_groups.items():
+            if not features:
+                raise ValueError(f"{group_name} must contain at least one feature")
 
     def fit(self, observations: Iterable[MacroObservation]) -> MacroRegimeReport:
         ordered = self._validate_and_order(observations)

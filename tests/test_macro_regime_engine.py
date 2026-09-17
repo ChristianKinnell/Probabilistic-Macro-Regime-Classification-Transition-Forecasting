@@ -96,6 +96,61 @@ class MacroRegimeEngineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "at least one observation is required"):
             self.engine.fit([])
 
+    def test_component_count_is_clamped_to_sample_count(self) -> None:
+        engine = MacroRegimeEngine(
+            growth_features=["growth"],
+            inflation_features=["inflation"],
+            volatility_features=["volatility"],
+            liquidity_features=["liquidity"],
+            n_components=8,
+        )
+        report = engine.fit(
+            [
+                MacroObservation(
+                    timestamp="2021-01-31",
+                    available_at="2021-01-31",
+                    macro_features={
+                        "growth": 1.0,
+                        "inflation": 0.5,
+                        "volatility": -0.5,
+                        "liquidity": 0.8,
+                    },
+                ),
+                MacroObservation(
+                    timestamp="2021-02-28",
+                    available_at="2021-02-28",
+                    macro_features={
+                        "growth": -1.0,
+                        "inflation": -0.5,
+                        "volatility": 0.6,
+                        "liquidity": -0.9,
+                    },
+                ),
+                MacroObservation(
+                    timestamp="2021-03-31",
+                    available_at="2021-03-31",
+                    macro_features={
+                        "growth": 0.9,
+                        "inflation": -0.7,
+                        "volatility": -0.8,
+                        "liquidity": 1.0,
+                    },
+                ),
+            ]
+        )
+
+        self.assertEqual(len(report.observations[0].growth_inflation.state_probabilities), 3)
+        self.assertEqual(len(report.observations[0].volatility_liquidity.state_probabilities), 3)
+
+    def test_empty_feature_groups_are_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "growth_features must contain at least one feature"):
+            MacroRegimeEngine(
+                growth_features=[],
+                inflation_features=["inflation"],
+                volatility_features=["volatility"],
+                liquidity_features=["liquidity"],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
