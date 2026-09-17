@@ -202,7 +202,15 @@ class MacroRegimeEngineTests(unittest.TestCase):
             ]
         )
 
-        self.assertEqual(report.nber_validation, {"evaluated_observations": 0.0})
+        self.assertEqual(
+            report.nber_validation,
+            {
+                "evaluated_observations": 0.0,
+                "accuracy": 0.0,
+                "precision": 0.0,
+                "recall": 0.0,
+            },
+        )
 
 
 if __name__ == "__main__":

@@ -88,6 +88,8 @@ def _covariance_matrix(matrix: Sequence[Sequence[float]]) -> List[List[float]]:
 
 def _power_iteration(matrix: Sequence[Sequence[float]], iterations: int = 50) -> List[float]:
     size = len(matrix)
+    if size == 0:
+        raise ValueError("principal component requires at least one feature")
     vector = [1.0 / math.sqrt(size)] * size
     for _ in range(iterations):
         candidate = _mat_vec(matrix, vector)
@@ -561,7 +563,12 @@ class MacroRegimeEngine:
             if observation.nber_recession is not None
         ]
         if not scored:
-            return {"evaluated_observations": 0.0}
+            return {
+                "evaluated_observations": 0.0,
+                "accuracy": 0.0,
+                "precision": 0.0,
+                "recall": 0.0,
+            }
 
         true_positive = sum(int(predicted and actual) for predicted, actual in scored)
         false_positive = sum(int(predicted and not actual) for predicted, actual in scored)
