@@ -151,6 +151,39 @@ class MacroRegimeEngineTests(unittest.TestCase):
                 liquidity_features=["liquidity"],
             )
 
+    def test_nber_precision_and_recall_are_exact(self) -> None:
+        report = self.engine.fit(
+            [
+                MacroObservation(
+                    timestamp="2021-01-31",
+                    available_at="2021-01-31",
+                    macro_features={"growth": -2.0, "inflation": 0.5, "volatility": 1.0, "liquidity": -1.0},
+                    nber_recession=True,
+                ),
+                MacroObservation(
+                    timestamp="2021-02-28",
+                    available_at="2021-02-28",
+                    macro_features={"growth": -1.5, "inflation": 0.4, "volatility": 0.8, "liquidity": -0.8},
+                    nber_recession=False,
+                ),
+                MacroObservation(
+                    timestamp="2021-03-31",
+                    available_at="2021-03-31",
+                    macro_features={"growth": 1.8, "inflation": -0.4, "volatility": -0.8, "liquidity": 0.9},
+                    nber_recession=True,
+                ),
+                MacroObservation(
+                    timestamp="2021-04-30",
+                    available_at="2021-04-30",
+                    macro_features={"growth": 2.1, "inflation": -0.6, "volatility": -1.0, "liquidity": 1.1},
+                    nber_recession=False,
+                ),
+            ]
+        )
+
+        self.assertAlmostEqual(report.nber_validation["precision"], 0.5)
+        self.assertAlmostEqual(report.nber_validation["recall"], 0.5)
+
 
 if __name__ == "__main__":
     unittest.main()

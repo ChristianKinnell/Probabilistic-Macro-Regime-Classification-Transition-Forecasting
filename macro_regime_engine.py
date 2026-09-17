@@ -103,6 +103,8 @@ def _principal_component_scores(matrix: Sequence[Sequence[float]]) -> List[float
         return [row[0] for row in matrix]
     covariance = _covariance_matrix(matrix)
     component = _power_iteration(covariance)
+    if sum(component) < 0.0:
+        component = [-value for value in component]
     return [_dot(row, component) for row in matrix]
 
 
@@ -140,10 +142,11 @@ class GaussianMixtureModel:
             sample_index = ordering[min(component * n_samples // component_count, n_samples - 1)]
             self.means.append(list(points[sample_index]))
 
-        global_mean = [_mean([point[column] for point in points]) for column in range(dimension)]
+        columns = _transpose(points)
+        global_mean = [_mean(column) for column in columns]
         global_variance = []
-        for column in range(dimension):
-            variance = _mean([(point[column] - global_mean[column]) ** 2 for point in points])
+        for column, mean in zip(columns, global_mean):
+            variance = _mean([(value - mean) ** 2 for value in column])
             global_variance.append(max(variance, 1.0))
 
         self.variances = [list(global_variance) for _ in range(component_count)]
@@ -246,9 +249,23 @@ class HiddenMarkovModel:
     ) -> tuple[List[List[float]], List[List[float]]]:
         filtered_probabilities: List[List[float]] = []
         forecast_probabilities: List[List[float]] = []
-        previous = list(self.initial_probabilities)
+        if not emissions:
+            return filtered_probabilities, forecast_probabilities
 
-        for emission in emissions:
+        previous = _normalize(
+            [
+                self.initial_probabilities[state] * emissions[0][state]
+                for state in range(len(self.initial_probabilities))
+            ]
+        )
+        filtered_probabilities.append(previous)
+        forecast = [
+            sum(previous[source] * self.transition_matrix[source][target] for source in range(len(previous)))
+            for target in range(len(previous))
+        ]
+        forecast_probabilities.append(_normalize(forecast))
+
+        for emission in emissions[1:]:
             predicted = [
                 sum(previous[source] * self.transition_matrix[source][target] for source in range(len(previous)))
                 for target in range(len(previous))
@@ -382,7 +399,7 @@ class MacroRegimeEngine:
                 "growth_inflation": growth_inflation_axis["transition_matrix"],
                 "volatility_liquidity": volatility_liquidity_axis["transition_matrix"],
             },
-            nber_validation=self._validate_against_nber(ordered, regime_observations),
+            nber_validation=self._validate_against_nber(ordered, growth_scores),
             asset_class_behaviour=self._map_asset_class_behaviour(ordered, regime_observations),
         )
 
@@ -496,14 +513,14 @@ class MacroRegimeEngine:
     def _validate_against_nber(
         self,
         observations: Sequence[MacroObservation],
-        classifications: Sequence[RegimeObservation],
+        growth_scores: Sequence[float],
     ) -> Dict[str, float]:
         scored = [
             (
-                "Growth↓" in classification.growth_inflation.label,
+                growth_score < 0.0,
                 bool(observation.nber_recession),
             )
-            for observation, classification in zip(observations, classifications)
+            for observation, growth_score in zip(observations, growth_scores)
             if observation.nber_recession is not None
         ]
         if not scored:
