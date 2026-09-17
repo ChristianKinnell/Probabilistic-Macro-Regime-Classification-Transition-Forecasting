@@ -97,7 +97,8 @@ class AxisModel:
         return result
 
     def _fit_hmm(self, states: np.ndarray, n_regimes: int) -> CategoricalHMM | None:
-        if len(states) < 3 or n_regimes < 2:
+        minimum_observations = max(3, n_regimes * n_regimes * 2)
+        if len(states) < minimum_observations or n_regimes < 2:
             return None
         hmm = CategoricalHMM(n_components=n_regimes, n_iter=200, random_state=self.config.random_state)
         try:
