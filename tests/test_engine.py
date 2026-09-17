@@ -61,6 +61,13 @@ class MacroRegimeEngineTests(unittest.TestCase):
         january_growth_revised = float(february.loc[february["observed_at"].dt.date == date(2020, 1, 1), "growth"].iloc[0])
         self.assertLess(january_growth_initial, january_growth_revised)
 
+    def test_point_in_time_series_respects_requested_cutoff(self) -> None:
+        january_series = self.dataset.time_series(as_of=date(2020, 1, 1))
+        february_series = self.dataset.time_series(as_of=date(2020, 2, 1))
+        january_growth_initial = float(january_series.loc[january_series["observed_at"].dt.date == date(2020, 1, 1), "growth"].iloc[0])
+        january_growth_revised = float(february_series.loc[february_series["observed_at"].dt.date == date(2020, 1, 1), "growth"].iloc[0])
+        self.assertLess(january_growth_initial, january_growth_revised)
+
     def test_classification_returns_joint_state_and_probabilities(self) -> None:
         result = self.engine.classify(self.dataset, date(2021, 12, 1))
         self.assertIn("joint_state", result)

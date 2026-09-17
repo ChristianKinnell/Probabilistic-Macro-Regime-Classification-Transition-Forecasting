@@ -13,9 +13,9 @@ Systematic two-axis macro regime engine using point-in-time data, PCA, GMM and H
 
 ## Package layout
 
-- `/home/runner/work/Probabilistic-Macro-Regime-Classification-Transition-Forecasting/Probabilistic-Macro-Regime-Classification-Transition-Forecasting/macro_regime/data.py` contains point-in-time data structures
-- `/home/runner/work/Probabilistic-Macro-Regime-Classification-Transition-Forecasting/Probabilistic-Macro-Regime-Classification-Transition-Forecasting/macro_regime/engine.py` contains the axis models and two-axis engine
-- `/home/runner/work/Probabilistic-Macro-Regime-Classification-Transition-Forecasting/Probabilistic-Macro-Regime-Classification-Transition-Forecasting/tests/test_engine.py` contains end-to-end unit coverage on synthetic data
+- `macro_regime/data.py` contains point-in-time data structures
+- `macro_regime/engine.py` contains the axis models and two-axis engine
+- `tests/test_engine.py` contains end-to-end unit coverage on synthetic data
 
 ## Quick start
 

@@ -65,7 +65,15 @@ class PointInTimeDataset:
         return latest
 
     def time_series(self, as_of: date | None = None) -> pd.DataFrame:
-        target_dates = self.observed_dates if as_of is None else [d for d in self.observed_dates if d <= as_of]
+        if as_of is not None:
+            return (
+                self.snapshot(as_of)
+                .loc[lambda frame: frame["observed_at"] <= pd.Timestamp(as_of)]
+                .sort_values("observed_at")
+                .reset_index(drop=True)
+            )
+
+        target_dates = self.observed_dates
         snapshots: list[pd.Series] = []
         for target_date in target_dates:
             snapshot = self.snapshot(target_date)

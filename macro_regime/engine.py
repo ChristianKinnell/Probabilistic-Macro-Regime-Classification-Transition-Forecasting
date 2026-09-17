@@ -213,19 +213,23 @@ class TwoAxisMacroRegimeEngine:
         return {"precision": precision, "recall": recall, "accuracy": accuracy}
 
     def asset_regime_map(self, dataset: PointInTimeDataset) -> dict[str, dict[str, float]]:
-        frame = dataset.time_series()
-        if frame.empty or not dataset.asset_names:
+        observed_dates = dataset.observed_dates
+        if not observed_dates or not dataset.asset_names:
             return {}
 
         grouped_returns: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
-        for observed_at in frame["observed_at"].dt.date.tolist():
+        for observed_at in observed_dates:
             regime = self.classify(dataset, observed_at)
-            row = frame[frame["observed_at"] == pd.Timestamp(observed_at)].iloc[-1]
+            snapshot = dataset.snapshot(observed_at)
+            row = snapshot[snapshot["observed_at"] == pd.Timestamp(observed_at)]
+            if row.empty:
+                continue
+            point_in_time_row = row.iloc[-1]
             label = str(regime["joint_state"])
             for asset in dataset.asset_names:
                 column = f"asset::{asset}"
-                if column in row and not pd.isna(row[column]):
-                    grouped_returns[label][asset].append(float(row[column]))
+                if column in point_in_time_row and not pd.isna(point_in_time_row[column]):
+                    grouped_returns[label][asset].append(float(point_in_time_row[column]))
 
         return {
             regime: {
